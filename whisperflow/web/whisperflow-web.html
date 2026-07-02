@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#4f6df5">
+<link rel="manifest" href='data:application/manifest+json,{"name":"WhisperFlow","short_name":"WhisperFlow","start_url":".","display":"standalone","background_color":"%23101014","theme_color":"%234f6df5"}'>
 <title>WhisperFlow</title>
 <style>
   :root {
@@ -57,6 +59,12 @@
     border-radius: 10px; padding: 8px 10px; font-size: 0.9rem; max-width: 60%;
   }
   input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); }
+  textarea {
+    width: 100%; min-height: 56px; resize: vertical;
+    background: var(--chip); color: var(--text); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px 10px; font-size: 0.9rem; font-family: inherit;
+  }
+  .hint { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
   #transcript {
     min-height: 110px; max-height: 240px; overflow-y: auto;
     white-space: pre-wrap; word-break: break-word; font-size: 1.05rem; line-height: 1.45;
@@ -153,6 +161,23 @@
       <label for="autostop">Auto-stop after silence</label>
       <input type="checkbox" id="autostop">
     </div>
+    <div class="row">
+      <label for="preview">Live preview while recording</label>
+      <input type="checkbox" id="preview">
+    </div>
+    <div class="row">
+      <label for="timestamps">Timestamps in transcript</label>
+      <input type="checkbox" id="timestamps">
+    </div>
+    <div class="row">
+      <label for="speakers">Label speakers — experimental, 2 voices</label>
+      <input type="checkbox" id="speakers">
+    </div>
+    <div style="padding-top: 6px;">
+      <label for="vocab" style="font-size: 0.95rem;">Names &amp; special words</label>
+      <textarea id="vocab" placeholder="One per line, e.g.&#10;LO-VDS&#10;Kasserer"></textarea>
+      <div class="hint">Close mis-hearings are auto-corrected to these spellings — works with every engine, fully offline.</div>
+    </div>
   </div>
 
   <div class="card">
@@ -160,6 +185,7 @@
     <div class="actions">
       <button class="btn primary" id="copyBtn" disabled>Copy</button>
       <button class="btn" id="txtBtn" disabled>Save .txt</button>
+      <button class="btn" id="srtBtn" disabled>Save .srt</button>
       <button class="btn" id="audioBtn" disabled>Save audio</button>
       <button class="btn" id="clearTranscriptBtn" disabled>Clear</button>
     </div>
@@ -188,24 +214,36 @@
     between English, Norsk and اردو is transcribed correctly per sentence. Use the
     <em>Small</em> or <em>Turbo</em> model for this: <em>Tiny</em> is weak on Urdu.
     The browser-dictation engine can't switch languages mid-recording.</p>
+    <p><strong>Interviews:</strong> turn on <em>Timestamps</em> and
+    <em>Label speakers</em>, then use <em>Save .srt</em> to export subtitles with
+    times (and speakers) you can line up with the saved audio. Speaker labelling
+    is a lightweight voice-pitch heuristic for two people — it works best when the
+    voices are clearly different, and it's honest enough to switch itself off when
+    it can't tell them apart.</p>
+    <p><strong>Live preview</strong> shows a rough draft while you're still talking
+    (Whisper engine). The final pass after you stop is always the accurate one. On
+    a slow phone you can turn it off to save battery.</p>
     <p><strong>Nothing is lost on a crash:</strong> while you record with the
     Whisper engine, the audio is saved to this browser's local storage every
     second, and browser-dictation text is saved as it arrives. If the app, tab or
     phone dies mid-recording, reopen this page and it offers to transcribe or
     restore what was captured. Everything is cleaned up after a normal finish.</p>
+    <p><strong>Install it like an app:</strong> put <code>sw.js</code> (ships next
+    to this file) in the same folder and serve both over HTTPS — free GitHub Pages
+    works. Then "Add to Home Screen" / "Install": the app and its AI library are
+    cached too, so after the first visit <em>everything</em> runs with no
+    internet at all.</p>
     <p><strong>Browser dictation engine:</strong> uses your browser's built-in speech
     recognition. It is instant and very accurate, but on some browsers (e.g.
     Chrome) the audio is processed by an online service — choose the Whisper
     engine if you want everything strictly on-device.</p>
     <p><strong>Phones:</strong> browsers only allow microphone access on secure pages.
     If the mic button does nothing when opening this file directly, serve the file
-    over HTTPS (for example free GitHub Pages) or via a local server, then open
-    that address on your phone. You can also "Add to Home Screen" to use it like
-    an app.</p>
-    <p><strong>Privacy:</strong> settings, history and crash-recovery data are stored
-    only in this browser. Nothing is uploaded; there are no analytics or accounts.</p>
-    <p><strong>Getting text into other apps:</strong> web pages can't type into other
-    apps, so tap Copy (or any history row) and paste where you need it.</p>
+    over HTTPS (see above) or via a local server, then open that address on your
+    phone.</p>
+    <p><strong>Privacy:</strong> settings, history, vocabulary and crash-recovery
+    data are stored only in this browser. Nothing is uploaded; there are no
+    analytics or accounts.</p>
   </details>
 </main>
 
@@ -233,15 +271,23 @@ const MODELS = {
   turbo: "onnx-community/whisper-large-v3-turbo",
 };
 const TRANSFORMERS_CDN = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5/+esm";
+const RATE = 16000;
 const SILENCE_MS = 1800;      // auto-stop after this much quiet
 const VOICE_RMS = 0.02;       // above this counts as speech (analyser, byte domain)
 const HISTORY_MAX = 50;
+const PREVIEW_EVERY_MS = 4000;
+const PREVIEW_WINDOW_S = 15;
 
 // ---------- settings (persisted in this browser only) ----------
-const defaults = { language: "auto", engine: "whisper", model: "tiny", cleanup: true, autostop: true };
+const defaults = {
+  language: "auto", engine: "whisper", model: "tiny",
+  cleanup: true, autostop: true, preview: true,
+  timestamps: false, speakers: false, vocab: "",
+};
 let settings = { ...defaults };
 try { settings = { ...defaults, ...JSON.parse(localStorage.getItem("wf.settings") || "{}") }; } catch {}
 const saveSettings = () => localStorage.setItem("wf.settings", JSON.stringify(settings));
+const vocabTerms = () => settings.vocab.split(/[\n,]+/).map((t) => t.trim()).filter(Boolean);
 
 // ---------- tiny DOM helpers ----------
 const $ = (id) => document.getElementById(id);
@@ -256,7 +302,8 @@ function toast(text) {
   toastTimer = setTimeout(() => el.classList.remove("show"), 1600);
 }
 
-let lastAudio = null;   // { blob, mime } of the most recent recording
+let lastAudio = null;      // { blob, mime } of the most recent recording
+let lastSegments = [];     // [{ start, end, text, speaker? }] of the last transcript
 function showTranscript(finalText, interimText = "") {
   const empty = !finalText && !interimText;
   transcriptEl.classList.toggle("placeholder", empty);
@@ -273,6 +320,7 @@ function showTranscript(finalText, interimText = "") {
   }
   $("copyBtn").disabled = !finalText;
   $("txtBtn").disabled = !finalText;
+  $("srtBtn").disabled = !lastSegments.length;
   $("clearTranscriptBtn").disabled = !finalText;
   $("audioBtn").disabled = !lastAudio;
 }
@@ -347,6 +395,146 @@ function cleanTranscript(text) {
   return cleaned;
 }
 
+// ---------- custom vocabulary (fuzzy post-correction, fully offline) ----------
+function editDistance(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+function similarity(a, b) {
+  const longest = Math.max(a.length, b.length);
+  return longest ? 1 - editDistance(a, b) / longest : 1;
+}
+// Replaces near-misses of user-supplied terms ("kaserer" → "Kasserer"), keeping
+// surrounding punctuation. Terms can be multi-word; matching is fuzzy so the
+// speech model's misspelling of a name still lands on the right spelling.
+function applyVocabulary(text, terms) {
+  if (!text || !terms.length) return text;
+  const strip = (w) => w.toLowerCase().replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, "");
+  const words = text.split(/\s+/).filter(Boolean);
+  for (const term of terms) {
+    const termWords = term.split(/\s+/);
+    const target = termWords.map((w) => w.toLowerCase()).join(" ");
+    if (target.replace(/\s/g, "").length < 3) continue;   // too short to match safely
+    for (let i = 0; i + termWords.length <= words.length; i++) {
+      const windowWords = words.slice(i, i + termWords.length);
+      const bare = windowWords.map(strip).join(" ").trim();
+      if (!bare) continue;
+      if (similarity(bare, target) >= 0.78) {
+        const lead = (windowWords[0].match(/^[\p{P}\p{S}]+/u) || [""])[0];
+        const trail = (windowWords[windowWords.length - 1].match(/[\p{P}\p{S}]+$/u) || [""])[0];
+        words.splice(i, termWords.length, lead + term + trail);
+      }
+    }
+  }
+  return words.join(" ");
+}
+
+// ---------- transcript formatting (timestamps, speakers, SRT) ----------
+function formatClock(seconds) {
+  const total = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+function buildTranscriptText(segments, opts) {
+  if (!opts.timestamps && !opts.speakers) {
+    return segments.map((s) => s.text).join(" ").trim();
+  }
+  return segments.map((s) => {
+    const prefix = [];
+    if (opts.timestamps) prefix.push(`[${formatClock(s.start)}]`);
+    if (opts.speakers && s.speaker) prefix.push(`Speaker ${s.speaker}:`);
+    return `${prefix.join(" ")} ${s.text}`.trim();
+  }).join("\n");
+}
+function toSRT(segments) {
+  const stamp = (seconds) => {
+    const ms = Math.max(0, Math.round(seconds * 1000));
+    const h = String(Math.floor(ms / 3_600_000)).padStart(2, "0");
+    const m = String(Math.floor(ms / 60_000) % 60).padStart(2, "0");
+    const s = String(Math.floor(ms / 1000) % 60).padStart(2, "0");
+    return `${h}:${m}:${s},${String(ms % 1000).padStart(3, "0")}`;
+  };
+  return segments.map((seg, i) =>
+    `${i + 1}\n${stamp(seg.start)} --> ${stamp(seg.end)}\n${seg.speaker ? `Speaker ${seg.speaker}: ` : ""}${seg.text}`
+  ).join("\n\n") + "\n";
+}
+
+// ---------- speaker labelling (experimental, 2 voices, pitch-based) ----------
+// Median fundamental frequency of a segment via normalized autocorrelation.
+function estimatePitch(samples, rate = RATE) {
+  const frame = Math.round(rate * 0.04);
+  const minLag = Math.round(rate / 350);   // 350 Hz ceiling
+  const maxLag = Math.round(rate / 70);    // 70 Hz floor
+  const pitches = [];
+  for (let start = 0; start + frame <= samples.length; start += frame) {
+    let energy = 0;
+    for (let i = start; i < start + frame; i++) energy += samples[i] * samples[i];
+    if (Math.sqrt(energy / frame) < 0.02) continue;   // quiet frame
+    // Correlation peaks at the period AND its multiples, so taking the plain
+    // max can land an octave (or two) low. Take the shortest *local maximum*
+    // that comes close to the global max — that's the fundamental. (A plain
+    // "close to max" test isn't enough: the peak's rising shoulder qualifies
+    // and biases the estimate sharp.)
+    let best = 0;
+    const values = new Float32Array(maxLag - minLag + 1);
+    for (let lag = minLag; lag <= maxLag; lag++) {
+      let corr = 0, norm = 0;
+      for (let i = start; i < start + frame - lag; i++) {
+        corr += samples[i] * samples[i + lag];
+        norm += samples[i] * samples[i];
+      }
+      values[lag - minLag] = norm > 0 ? corr / norm : 0;
+      if (values[lag - minLag] > best) best = values[lag - minLag];
+    }
+    if (best <= 0.3) continue;
+    for (let lag = minLag + 1; lag < maxLag; lag++) {
+      const k = lag - minLag;
+      if (values[k] >= best * 0.9 && values[k] >= values[k - 1] && values[k] >= values[k + 1]) {
+        pitches.push(rate / lag);
+        break;
+      }
+    }
+  }
+  if (!pitches.length) return 0;
+  pitches.sort((a, b) => a - b);
+  return pitches[Math.floor(pitches.length / 2)];
+}
+// Clusters segment pitches into two voices (1-D 2-means). Returns false — and
+// leaves segments unlabelled — when it can't confidently tell two voices apart.
+function assignSpeakers(segments) {
+  const values = segments.map((s) => s.pitch).filter((p) => p > 0);
+  if (values.length < 2) return false;
+  let c1 = Math.min(...values), c2 = Math.max(...values);
+  if (c2 - c1 < 30) return false;           // sounds like one voice
+  for (let iter = 0; iter < 12; iter++) {
+    const g1 = [], g2 = [];
+    for (const v of values) (Math.abs(v - c1) <= Math.abs(v - c2) ? g1 : g2).push(v);
+    if (!g1.length || !g2.length) return false;
+    const m1 = g1.reduce((a, b) => a + b) / g1.length;
+    const m2 = g2.reduce((a, b) => a + b) / g2.length;
+    if (m1 === c1 && m2 === c2) break;
+    c1 = m1; c2 = m2;
+  }
+  if (Math.abs(c2 - c1) < 25) return false; // clusters too close to trust
+  const low = Math.min(c1, c2), high = Math.max(c1, c2);
+  for (const s of segments) {
+    if (s.pitch > 0) s.speaker = Math.abs(s.pitch - low) <= Math.abs(s.pitch - high) ? 1 : 2;
+  }
+  for (let i = 0; i < segments.length; i++) {   // unpitched segments follow their neighbor
+    if (!segments[i].speaker) segments[i].speaker = i ? segments[i - 1].speaker : 1;
+  }
+  return true;
+}
+
 // ---------- crash-safe storage (IndexedDB for audio chunks) ----------
 let dbPromise = null;
 function getDB() {
@@ -418,7 +606,7 @@ function startVAD(stream, onSilence) {
 // Splits 16 kHz samples into speech segments separated by pauses, so each
 // segment can get its own language detection. People switch languages at
 // sentence boundaries, and sentence boundaries are where the pauses are.
-function segmentSpeech(samples, rate = 16000) {
+function segmentSpeech(samples, rate = RATE) {
   const FRAME_S = 0.02;   // analysis frame
   const GAP_S = 0.6;      // pauses shorter than this stay inside one segment
   const MIN_S = 0.3;      // drop blips shorter than this
@@ -494,9 +682,8 @@ async function ensureWhisper() {
 }
 
 function toMono16k(audioBuffer) {
-  const targetRate = 16000;
-  const ratio = audioBuffer.sampleRate / targetRate;
-  const length = Math.floor(audioBuffer.duration * targetRate);
+  const ratio = audioBuffer.sampleRate / RATE;
+  const length = Math.floor(audioBuffer.duration * RATE);
   const channels = [];
   for (let c = 0; c < audioBuffer.numberOfChannels; c++) channels.push(audioBuffer.getChannelData(c));
   const out = new Float32Array(length);
@@ -521,35 +708,62 @@ async function blobToSamples(blob) {
   return toMono16k(decoded);
 }
 
-// In "Auto · Mixed" mode each pause-separated segment is transcribed on its
-// own, so Whisper re-detects the language per segment — that's what makes
-// English/Norsk/Urdu switching inside one conversation work.
+// Full-quality pass. In "Auto · Mixed" mode each pause-separated segment is
+// transcribed on its own, so Whisper re-detects the language per segment —
+// that's what makes English/Norsk/Urdu switching in one conversation work.
+// Returns [{ start, end, text, speaker? }].
 async function transcribeSamples(audio) {
   await ensureWhisper();
+  let segments = [];
+
   if (settings.language === "auto") {
-    const segments = segmentSpeech(audio);
-    if (segments.length > 1) {
-      const parts = [];
-      for (let i = 0; i < segments.length; i++) {
-        setStatus(`Transcribing… part ${i + 1} of ${segments.length}`);
-        const [s, e] = segments[i];
+    const ranges = segmentSpeech(audio);
+    if (ranges.length > 1) {
+      for (let i = 0; i < ranges.length; i++) {
+        setStatus(`Transcribing… part ${i + 1} of ${ranges.length}`);
+        const [s, e] = ranges[i];
         const result = await whisperPipeline(audio.slice(s, e), { task: "transcribe" });
         const text = (result.text || "").trim();
-        if (text) parts.push(text);
+        if (text) segments.push({ start: s / RATE, end: e / RATE, text, sampleRange: [s, e] });
       }
-      return parts.join(" ");
     }
   }
-  const options = { task: "transcribe" };
-  const whisperLang = LANGS[settings.language].whisper;
-  if (whisperLang) options.language = whisperLang;
-  if (audio.length > 16000 * 28) {           // chunk long recordings
-    options.chunk_length_s = 30;
-    options.stride_length_s = 5;
+
+  if (!segments.length) {   // fixed language, or one continuous utterance
+    setStatus("Transcribing…");
+    const options = { task: "transcribe", return_timestamps: true };
+    const whisperLang = LANGS[settings.language].whisper;
+    if (whisperLang) options.language = whisperLang;
+    if (audio.length > RATE * 28) {
+      options.chunk_length_s = 30;
+      options.stride_length_s = 5;
+    }
+    const result = await whisperPipeline(audio, options);
+    const duration = audio.length / RATE;
+    const chunks = (result.chunks || []).filter((c) => (c.text || "").trim());
+    if (chunks.length) {
+      segments = chunks.map((c) => {
+        const start = c.timestamp && c.timestamp[0] != null ? c.timestamp[0] : 0;
+        const end = c.timestamp && c.timestamp[1] != null ? c.timestamp[1] : duration;
+        return {
+          start, end, text: c.text.trim(),
+          sampleRange: [Math.floor(start * RATE), Math.min(audio.length, Math.ceil(end * RATE))],
+        };
+      });
+    } else if ((result.text || "").trim()) {
+      segments = [{ start: 0, end: duration, text: result.text.trim(), sampleRange: [0, audio.length] }];
+    }
   }
-  setStatus("Transcribing…");
-  const result = await whisperPipeline(audio, options);
-  return (result.text || "").trim();
+
+  if (settings.speakers && segments.length > 1) {
+    for (const seg of segments) {
+      const [s, e] = seg.sampleRange;
+      seg.pitch = estimatePitch(audio.slice(s, e));
+    }
+    assignSpeakers(segments);
+  }
+  for (const seg of segments) { delete seg.sampleRange; delete seg.pitch; }
+  return segments;
 }
 
 async function transcribeBlob(blob, mime) {
@@ -560,6 +774,7 @@ async function transcribeBlob(blob, mime) {
 
 const whisperEngine = {
   stream: null, recorder: null, chunks: [], stopVAD: null,
+  previewTimer: null, previewBusy: false,
   async start() {
     await ensureWhisper();   // load before recording so progress is visible
     this.stream = await navigator.mediaDevices.getUserMedia({
@@ -578,19 +793,47 @@ const whisperEngine = {
     this.recorder.addEventListener("stop", () => this.transcribe());
     this.recorder.start(1000);   // timeslice → periodic dataavailable events
     if (settings.autostop) this.stopVAD = startVAD(this.stream, () => stopDictation());
+    if (settings.preview) this.previewTimer = setInterval(() => this.previewTick(), PREVIEW_EVERY_MS);
   },
   stop() {
+    clearInterval(this.previewTimer);
+    this.previewTimer = null;
     if (this.stopVAD) { this.stopVAD(); this.stopVAD = null; }
     if (this.recorder && this.recorder.state !== "inactive") this.recorder.stop();
     if (this.stream) { this.stream.getTracks().forEach((t) => t.stop()); this.stream = null; }
   },
+  // Rough live draft of the last few seconds while still recording. The final
+  // pass after stop is the accurate one. Skips a tick when the previous one is
+  // still running, so slow devices degrade gracefully instead of piling up.
+  async previewTick() {
+    if (this.previewBusy || !recording || !this.chunks.length || !whisperPipeline) return;
+    this.previewBusy = true;
+    try {
+      const blob = new Blob(this.chunks, { type: this.recorder.mimeType });
+      const samples = await blobToSamples(blob);
+      const win = samples.length > RATE * PREVIEW_WINDOW_S
+        ? samples.slice(samples.length - RATE * PREVIEW_WINDOW_S)
+        : samples;
+      if (win.length < RATE * 2) return;
+      const options = { task: "transcribe" };
+      const whisperLang = LANGS[settings.language].whisper;
+      if (whisperLang) options.language = whisperLang;
+      const result = await whisperPipeline(win, options);
+      if (recording) showTranscript("", (result.text || "").trim());
+    } catch {
+      // preview is best-effort; the final pass still runs
+    } finally {
+      this.previewBusy = false;
+    }
+  },
   async transcribe() {
     try {
       micBtn.disabled = true;
+      while (this.previewBusy) await new Promise((r) => setTimeout(r, 100));   // let a preview finish
       const blob = new Blob(this.chunks, { type: this.recorder.mimeType });
-      const text = await transcribeBlob(blob, this.recorder.mimeType);
+      const segments = await transcribeBlob(blob, this.recorder.mimeType);
       await clearRecoveryAudio();   // finished normally — recovery copy not needed
-      finishDictation(text);
+      finishDictation(segments);
     } catch (err) {
       failDictation(err, "Your audio was saved — reload this page to recover and retry.");
     }
@@ -600,7 +843,7 @@ const whisperEngine = {
 // ---------- engine: native browser dictation ----------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const nativeEngine = {
-  rec: null, finalText: "", stopping: false,
+  rec: null, finalText: "", stopping: false, segments: [], startedAt: 0, lastEnd: 0,
   supported: !!SR,
   async start() {
     this.rec = new SR();
@@ -609,19 +852,29 @@ const nativeEngine = {
     // With auto-stop on, let the browser end after a phrase; otherwise keep going.
     this.rec.continuous = !settings.autostop;
     this.finalText = "";
+    this.segments = [];
+    this.startedAt = Date.now();
+    this.lastEnd = 0;
     this.stopping = false;
     this.rec.addEventListener("result", (e) => {
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const piece = e.results[i][0].transcript;
-        if (e.results[i].isFinal) this.finalText += piece;
-        else interim += piece;
+        if (e.results[i].isFinal) {
+          this.finalText += piece;
+          const now = (Date.now() - this.startedAt) / 1000;
+          const text = piece.trim();
+          if (text) this.segments.push({ start: this.lastEnd, end: now, text });
+          this.lastEnd = now;
+        } else {
+          interim += piece;
+        }
       }
       saveDraftText(this.finalText.trim());   // crash-safe copy of the text so far
       showTranscript(this.finalText.trim(), interim.trim());
     });
     this.rec.addEventListener("end", () => {
-      if (!this.stopping) finishDictation(this.finalText.trim());
+      if (!this.stopping) finishDictation(this.segments);
     });
     this.rec.addEventListener("error", (e) => {
       if (e.error !== "no-speech" && e.error !== "aborted") {
@@ -644,8 +897,7 @@ function startTimer() {
   recordingStartedAt = Date.now();
   recordingTimer = setInterval(() => {
     const total = Math.floor((Date.now() - recordingStartedAt) / 1000);
-    const m = Math.floor(total / 60), s = String(total % 60).padStart(2, "0");
-    setStatus(`Listening… ${m}:${s}${settings.autostop ? " (stops when you pause)" : " — tap to stop"}`);
+    setStatus(`Listening… ${formatClock(total)}${settings.autostop ? " (stops when you pause)" : " — tap to stop"}`);
   }, 1000);
 }
 function stopTimer() {
@@ -659,6 +911,8 @@ async function startDictation() {
     recording = true;
     micBtn.classList.add("recording");
     micBtn.setAttribute("aria-label", "Stop dictation");
+    lastSegments = [];
+    lastAudio = null;
     showTranscript("");
     await currentEngine().start();
     setStatus("Listening…");
@@ -674,14 +928,24 @@ function stopDictation() {
   currentEngine().stop();
 }
 
-function finishDictation(text) {
+function finishDictation(segments) {
   recording = false;
   stopTimer();
   micBtn.disabled = false;
   micBtn.classList.remove("recording");
   micBtn.setAttribute("aria-label", "Start dictation");
   clearDraftText();
-  if (settings.cleanup && text) text = cleanTranscript(text);
+
+  const terms = vocabTerms();
+  segments = (segments || []).map((seg) => {
+    let text = (seg.text || "").trim();
+    if (settings.cleanup && text) text = cleanTranscript(text);
+    if (text) text = applyVocabulary(text, terms);
+    return { ...seg, text };
+  }).filter((seg) => seg.text);
+
+  lastSegments = segments;
+  const text = buildTranscriptText(segments, settings);
   showTranscript(text);
   if (text) {
     addHistory(text);
@@ -732,9 +996,9 @@ async function checkRecovery() {
       try {
         micBtn.disabled = true;
         const blob = new Blob(chunks, { type: meta.mime || "audio/webm" });
-        const text = await transcribeBlob(blob, meta.mime || "audio/webm");
+        const segments = await transcribeBlob(blob, meta.mime || "audio/webm");
         await clearRecoveryAudio();
-        finishDictation(text);
+        finishDictation(segments);
       } catch (err) {
         failDictation(err, "The rescued audio is still saved — you can reload and try again.");
       }
@@ -768,14 +1032,16 @@ function renderLangChips() {
 const engineSel = $("engine"), modelSel = $("model");
 engineSel.value = settings.engine;
 modelSel.value = settings.model;
-$("cleanup").checked = settings.cleanup;
-$("autostop").checked = settings.autostop;
+for (const key of ["cleanup", "autostop", "preview", "timestamps", "speakers"]) {
+  $(key).checked = settings[key];
+  $(key).addEventListener("change", (e) => { settings[key] = e.target.checked; saveSettings(); });
+}
+$("vocab").value = settings.vocab;
+$("vocab").addEventListener("change", (e) => { settings.vocab = e.target.value; saveSettings(); });
 const syncModelRow = () => { $("modelRow").style.display = settings.engine === "whisper" ? "" : "none"; };
 
 engineSel.addEventListener("change", () => { settings.engine = engineSel.value; saveSettings(); syncModelRow(); });
 modelSel.addEventListener("change", () => { settings.model = modelSel.value; saveSettings(); });
-$("cleanup").addEventListener("change", (e) => { settings.cleanup = e.target.checked; saveSettings(); });
-$("autostop").addEventListener("change", (e) => { settings.autostop = e.target.checked; saveSettings(); });
 
 $("copyBtn").addEventListener("click", () => {
   if (!transcriptEl.classList.contains("placeholder")) copyText(transcriptEl.textContent);
@@ -784,12 +1050,16 @@ $("txtBtn").addEventListener("click", () => {
   if (transcriptEl.classList.contains("placeholder")) return;
   downloadFile("whisperflow-transcript.txt", new Blob([transcriptEl.textContent], { type: "text/plain" }));
 });
+$("srtBtn").addEventListener("click", () => {
+  if (!lastSegments.length) return;
+  downloadFile("whisperflow-transcript.srt", new Blob([toSRT(lastSegments)], { type: "text/plain" }));
+});
 $("audioBtn").addEventListener("click", () => {
   if (!lastAudio) return;
   const ext = (lastAudio.mime || "").includes("mp4") ? "m4a" : "webm";
   downloadFile(`whisperflow-audio.${ext}`, lastAudio.blob);
 });
-$("clearTranscriptBtn").addEventListener("click", () => showTranscript(""));
+$("clearTranscriptBtn").addEventListener("click", () => { lastSegments = []; showTranscript(""); });
 $("clearHistoryBtn").addEventListener("click", () => {
   history = [];
   saveHistory();
@@ -803,6 +1073,13 @@ if (!nativeEngine.supported) {
 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
   setStatus("This page needs HTTPS (or localhost) for microphone access — see the notes below.");
   micBtn.disabled = true;
+}
+
+// Installable-app mode: when served over HTTPS with sw.js alongside, the page
+// and its AI library are cached too — after the first visit, everything is
+// offline. Opening the file directly just skips this quietly.
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
 
 renderLangChips();

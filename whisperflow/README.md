@@ -15,6 +15,14 @@ one line in `Shared/WhisperTranscriber.swift`.
   transcript wherever you need it. (iOS doesn't allow apps to type into other
   apps, so copy/paste is the honest way to do this.)
 
+**Also in this folder:** [`web/whisperflow-web.html`](web/whisperflow-web.html) — the
+same idea as a single HTML file that runs on any desktop or phone browser, with
+Whisper running in-browser (offline after the first model download), mixed
+English/Norwegian/Urdu transcription, crash-safe recording, timestamps + SRT
+export, experimental two-speaker labels, live preview, and custom vocabulary.
+Host it together with [`web/sw.js`](web/sw.js) on HTTPS (e.g. GitHub Pages) to
+make it installable and fully offline.
+
 ---
 
 ## How the app works — the 5 building blocks
