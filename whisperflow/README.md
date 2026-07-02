@@ -32,6 +32,21 @@ An app like Wispr Flow sounds magical, but it's just five simple pieces glued to
 Pieces 1–3 are shared between Mac and iPhone. Only the UI and the "type it for
 me" part differ per platform.
 
+On top of the core there are a few quality-of-life extras, all optional and
+all offline:
+
+- **Text cleanup** (`Shared/TranscriptCleaner.swift`) — removes filler words
+  ("um", "altså", "یعنی") and fixes capitalization before the text is used.
+  On macOS 26+/iOS 26+ Apple's on-device Foundation Models LLM does the
+  polishing; older OSes get a rule-based pass.
+- **Auto-stop on silence** (in `AudioRecorder.swift`) — a tiny energy-based
+  voice-activity detector ends the recording ~1.5 s after you stop talking.
+  Default on for iOS, off for macOS (releasing the key already stops there).
+- **History** (`Shared/TranscriptHistory.swift`) — the last 50 dictations,
+  stored only on-device; click/tap to copy, one button to clear.
+- **Configurable push-to-talk key** (macOS) — right ⌥, right ⌘, right ⌃ or
+  Fn/Globe, picked in the menu-bar popover.
+
 ```
  hold hotkey          release                 done
      │                   │                      │
@@ -58,8 +73,11 @@ In Xcode:
 2. Set your own team under *Signing & Capabilities* (any free Apple ID works).
 3. Press **⌘R**.
 
-First launch downloads the Whisper model (~500 MB for the multilingual `small`) —
-watch the status in the menu-bar popover. It's cached afterwards.
+First launch downloads the Whisper model — watch the status in the menu-bar
+popover; it's cached afterwards. The Mac defaults to `large-v3` (~3 GB, the
+best quality, and clearly better for Urdu); iPhone defaults to `small`
+(~500 MB). Change `defaultModel` in `Shared/WhisperTranscriber.swift` if you
+want a faster first start on the Mac.
 
 ### Offline & privacy guarantees
 
@@ -124,19 +142,31 @@ custom vocabulary — is polish on top of these eight steps.
 
 ## Ideas to extend it
 
-- **Better accuracy**: switch `defaultModel` in `WhisperTranscriber.swift` to
-  `"large-v3"` (Apple Silicon handles it fine). Urdu in particular benefits
-  from the bigger model.
 - **Streaming preview**: WhisperKit supports real-time transcription while you talk.
-- **AI cleanup**: pipe the raw transcript through a *local* LLM (Apple's
-  on-device Foundation Models framework, or a small model via MLX/llama.cpp) to
-  remove filler words and fix punctuation before pasting — Wispr Flow's secret
-  sauce, kept 100% offline.
-- **Custom hotkey**: replace the hard-coded right-Option in `HotkeyMonitor.swift`
-  with a user-configurable shortcut (e.g. the `KeyboardShortcuts` package).
+- **Smarter cleanup**: swap the rule-based fallback in `TranscriptCleaner.swift`
+  for a small local model via MLX or llama.cpp on OSes without Apple's
+  Foundation Models.
 - **iOS keyboard extension**: a custom keyboard could offer dictation inside
   other apps, but keyboard extensions have tight mic/memory restrictions —
   that's why it's not in this starter.
+
+## Distributing it
+
+For the Mac app, the standard open-source route (no App Store needed):
+
+1. **Archive**: Xcode → Product → Archive (or
+   `xcodebuild -scheme WhisperFlowMac archive`).
+2. **Sign & notarize**: sign with a Developer ID Application certificate, zip
+   the app, submit with `xcrun notarytool submit WhisperFlow.zip --wait`, then
+   `xcrun stapler staple WhisperFlow.app`. Unsigned builds still run, but users
+   have to right-click → Open past Gatekeeper.
+3. **Publish** the zip on a GitHub Release, and optionally add a
+   [Homebrew cask](https://docs.brew.sh/Cask-Cookbook) so people can
+   `brew install --cask whisperflow`.
+
+The iOS app can only realistically ship through the App Store (TestFlight for
+testing). Note that Apple's developer program requires a real identity, so full
+anonymity is only achievable for the GitHub/Homebrew side.
 
 ## License & branding
 

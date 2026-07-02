@@ -17,6 +17,17 @@ final class AudioRecorder {
 
     var isRecording: Bool { engine.isRunning }
 
+    /// Auto-stop on silence: once the user has spoken and then stays quiet for
+    /// this long, `onAutoStop` fires (on the main queue). Set to nil to disable.
+    var autoStopAfterSilence: TimeInterval?
+    var onAutoStop: (() -> Void)?
+
+    private var heardVoice = false
+    private var autoStopFired = false
+    private var silentSampleCount = 0
+    /// RMS energy above this counts as speech; below it counts as silence.
+    private let voiceRMSThreshold: Float = 0.015
+
     /// Asks the OS for microphone access (shows the system prompt on first run).
     func requestPermission() async -> Bool {
         await withCheckedContinuation { continuation in
@@ -35,6 +46,9 @@ final class AudioRecorder {
     func start() throws {
         sampleLock.lock()
         samples.removeAll()
+        heardVoice = false
+        autoStopFired = false
+        silentSampleCount = 0
         sampleLock.unlock()
 
         #if os(iOS)
@@ -90,8 +104,35 @@ final class AudioRecorder {
         }
 
         guard let channelData = converted.floatChannelData else { return }
+        let frames = Int(converted.frameLength)
+        let buffer = UnsafeBufferPointer(start: channelData[0], count: frames)
+
         sampleLock.lock()
-        samples.append(contentsOf: UnsafeBufferPointer(start: channelData[0], count: Int(converted.frameLength)))
+        samples.append(contentsOf: buffer)
         sampleLock.unlock()
+
+        detectSilence(in: buffer)
+    }
+
+    /// Tiny energy-based voice activity detection: tracks how long the user
+    /// has been quiet after speaking, and fires `onAutoStop` once.
+    private func detectSilence(in buffer: UnsafeBufferPointer<Float>) {
+        guard let limit = autoStopAfterSilence, !autoStopFired, !buffer.isEmpty else { return }
+
+        let meanSquare = buffer.reduce(Float(0)) { $0 + $1 * $1 } / Float(buffer.count)
+        let rms = meanSquare.squareRoot()
+
+        if rms > voiceRMSThreshold {
+            heardVoice = true
+            silentSampleCount = 0
+        } else if heardVoice {
+            silentSampleCount += buffer.count
+            if Double(silentSampleCount) / targetFormat.sampleRate >= limit {
+                autoStopFired = true
+                DispatchQueue.main.async { [weak self] in
+                    self?.onAutoStop?()
+                }
+            }
+        }
     }
 }

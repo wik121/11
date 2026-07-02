@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @main
@@ -6,7 +7,7 @@ struct WhisperFlowMacApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarView(engine: appDelegate.engine)
+            MenuBarView(engine: appDelegate.engine, hotkey: appDelegate.hotkey)
         } label: {
             MenuBarIcon(engine: appDelegate.engine)
         }
@@ -19,7 +20,7 @@ struct WhisperFlowMacApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     let engine = DictationEngine()
-    private let hotkey = HotkeyMonitor()
+    let hotkey = HotkeyMonitor()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Triggers the Accessibility prompt on first launch. Without this permission

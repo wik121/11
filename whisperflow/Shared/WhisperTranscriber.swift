@@ -24,10 +24,17 @@ enum DictationLanguage: String, CaseIterable, Identifiable {
 /// Wraps WhisperKit: downloads a Whisper model on first launch (cached afterwards)
 /// and turns raw audio samples into text — fully on-device, nothing leaves the device.
 actor WhisperTranscriber {
-    /// "small" is multilingual (English, Norwegian, Urdu, ~96 more) and a good
-    /// speed/accuracy balance. "large-v3" is noticeably better for Urdu and
-    /// runs fine on Apple Silicon; "base" is faster but English-leaning.
-    static let defaultModel = "small"
+    /// Both are multilingual (English, Norwegian, Urdu, ~96 more).
+    /// Macs get "large-v3" — noticeably better for Urdu, and Apple Silicon
+    /// handles it fine (one-time ~3 GB download; switch to "small" for a
+    /// quicker start). iPhones get "small" for speed and battery.
+    static let defaultModel: String = {
+        #if os(macOS)
+        return "large-v3"
+        #else
+        return "small"
+        #endif
+    }()
 
     private var whisperKit: WhisperKit?
 
