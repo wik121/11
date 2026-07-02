@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>WhisperFlow</title>
+<style>
+  :root {
+    --bg: #f4f4f6;
+    --card: #ffffff;
+    --text: #1c1c1e;
+    --muted: #6e6e73;
+    --accent: #4f6df5;
+    --accent-press: #3f5ae0;
+    --danger: #e5484d;
+    --border: #e3e3e8;
+    --chip: #e9e9ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101014;
+      --card: #1b1b21;
+      --text: #f2f2f7;
+      --muted: #98989f;
+      --accent: #6b85ff;
+      --accent-press: #5470f0;
+      --danger: #ff6369;
+      --border: #2c2c33;
+      --chip: #26262d;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100dvh; padding: 16px 16px 56px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  main { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  h1 { font-size: 1.6rem; letter-spacing: -0.02em; }
+  #status { color: var(--muted); font-size: 0.95rem; min-height: 1.3em; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 14px;
+  }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; }
+  .row label:first-child { font-size: 0.95rem; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chips button {
+    border: 1px solid var(--border); background: var(--chip); color: var(--text);
+    border-radius: 999px; padding: 8px 14px; font-size: 0.95rem; cursor: pointer;
+  }
+  .chips button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  select {
+    background: var(--chip); color: var(--text); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px 10px; font-size: 0.9rem; max-width: 60%;
+  }
+  input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); }
+  #transcript {
+    min-height: 110px; max-height: 240px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-word; font-size: 1.05rem; line-height: 1.45;
+  }
+  #transcript.placeholder { color: var(--muted); }
+  #transcript .interim { color: var(--muted); }
+  .actions { display: flex; gap: 10px; margin-top: 10px; }
+  .btn {
+    border: none; border-radius: 10px; padding: 10px 14px; font-size: 0.95rem;
+    background: var(--chip); color: var(--text); cursor: pointer;
+  }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  #micWrap { display: flex; justify-content: center; padding: 6px 0; }
+  #mic {
+    width: 104px; height: 104px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--accent); color: #fff; font-size: 44px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 24px rgba(79, 109, 245, 0.35);
+    transition: transform 0.1s ease, background 0.2s ease;
+  }
+  #mic:active { transform: scale(0.95); background: var(--accent-press); }
+  #mic.recording { background: var(--danger); animation: pulse 1.4s ease-out infinite; }
+  #mic:disabled { opacity: 0.5; animation: none; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(229, 72, 77, 0.45); }
+    100% { box-shadow: 0 0 0 26px rgba(229, 72, 77, 0); }
+  }
+  .section-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .section-head h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .link-btn { background: none; border: none; color: var(--muted); font-size: 0.85rem; cursor: pointer; padding: 0; }
+  #historyList { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  #historyList li {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 10px; background: var(--chip); cursor: pointer; font-size: 0.92rem;
+  }
+  #historyList .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  #historyList time { color: var(--muted); font-size: 0.8rem; flex-shrink: 0; }
+  details { font-size: 0.9rem; color: var(--muted); }
+  details summary { cursor: pointer; color: var(--text); }
+  details p { margin: 8px 0; }
+  #toast {
+    position: fixed; left: 50%; bottom: 66px; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); border-radius: 999px; padding: 8px 16px;
+    font-size: 0.9rem; opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+  }
+  #toast.show { opacity: 1; }
+  .wm {
+    position: fixed; right: 12px; bottom: 10px;
+    font-size: 0.72rem; font-weight: 600; color: var(--muted); opacity: 0.7;
+    user-select: none; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>WhisperFlow</h1>
+  <div id="status">Tap the mic and start talking.</div>
+
+  <div class="card">
+    <div class="chips" id="langChips" role="group" aria-label="Language"></div>
+    <div class="row">
+      <label for="engine">Engine</label>
+      <select id="engine">
+        <option value="whisper">Whisper AI — on-device &amp; private</option>
+        <option value="native">Browser dictation — instant</option>
+      </select>
+    </div>
+    <div class="row" id="modelRow">
+      <label for="model">Whisper model</label>
+      <select id="model">
+        <option value="tiny">Tiny — fast, ~40 MB</option>
+        <option value="base">Base — better, ~80 MB</option>
+        <option value="small">Small — best, ~250 MB</option>
+      </select>
+    </div>
+    <div class="row">
+      <label for="cleanup">Clean up text (remove filler words)</label>
+      <input type="checkbox" id="cleanup">
+    </div>
+    <div class="row">
+      <label for="autostop">Auto-stop after silence</label>
+      <input type="checkbox" id="autostop">
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="transcript" class="placeholder" dir="auto">Your words will appear here.</div>
+    <div class="actions">
+      <button class="btn primary" id="copyBtn" disabled>Copy</button>
+      <button class="btn" id="clearTranscriptBtn" disabled>Clear</button>
+    </div>
+  </div>
+
+  <div id="micWrap">
+    <button id="mic" aria-label="Start dictation">🎙️</button>
+  </div>
+
+  <div class="card" id="historyCard" hidden>
+    <div class="section-head">
+      <h2>Recent</h2>
+      <button class="link-btn" id="clearHistoryBtn">Clear all</button>
+    </div>
+    <ul id="historyList"></ul>
+  </div>
+
+  <details class="card">
+    <summary>How this works &amp; offline notes</summary>
+    <p><strong>Whisper AI engine:</strong> the Whisper speech model runs inside your
+    browser — audio never leaves your device. The first use downloads the model
+    once; your browser caches it, and after that transcription works offline.</p>
+    <p><strong>Browser dictation engine:</strong> uses your browser's built-in speech
+    recognition. It is instant and very accurate, but on some browsers (e.g.
+    Chrome) the audio is processed by an online service — choose the Whisper
+    engine if you want everything strictly on-device.</p>
+    <p><strong>Phones:</strong> browsers only allow microphone access on secure pages.
+    If the mic button does nothing when opening this file directly, serve the file
+    over HTTPS (for example free GitHub Pages) or via a local server, then open
+    that address on your phone. You can also "Add to Home Screen" to use it like
+    an app.</p>
+    <p><strong>Privacy:</strong> settings and history are stored only in this
+    browser (local storage). Nothing is uploaded; there are no analytics or accounts.</p>
+    <p><strong>Getting text into other apps:</strong> web pages can't type into other
+    apps, so tap Copy (or any history row) and paste where you need it.</p>
+  </details>
+</main>
+
+<div id="toast" role="status"></div>
+<div class="wm">WT 2026</div>
+
+<script type="module">
+/* WhisperFlow Web — a single-file, offline-capable dictation app.
+   Engines: Whisper AI in-browser (transformers.js, cached after first download)
+   or the browser's native SpeechRecognition. Everything is stored locally. */
+
+// ---------- languages & models ----------
+const LANGS = {
+  auto: { label: "Auto",    whisper: null,        native: navigator.language || "en-US" },
+  en:   { label: "English", whisper: "english",   native: "en-US" },
+  no:   { label: "Norsk",   whisper: "norwegian", native: "nb-NO" },
+  ur:   { label: "اردو",    whisper: "urdu",      native: "ur-PK" },
+};
+const MODELS = {
+  tiny:  "onnx-community/whisper-tiny",
+  base:  "onnx-community/whisper-base",
+  small: "onnx-community/whisper-small",
+};
+const TRANSFORMERS_CDN = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5/+esm";
+const SILENCE_MS = 1800;      // auto-stop after this much quiet
+const VOICE_RMS = 0.02;       // above this counts as speech
+const HISTORY_MAX = 50;
+
+// ---------- settings (persisted in this browser only) ----------
+const defaults = { language: "auto", engine: "whisper", model: "tiny", cleanup: true, autostop: true };
+let settings = { ...defaults };
+try { settings = { ...defaults, ...JSON.parse(localStorage.getItem("wf.settings") || "{}") }; } catch {}
+const saveSettings = () => localStorage.setItem("wf.settings", JSON.stringify(settings));
+
+// ---------- tiny DOM helpers ----------
+const $ = (id) => document.getElementById(id);
+const statusEl = $("status"), transcriptEl = $("transcript"), micBtn = $("mic");
+const setStatus = (text) => { statusEl.textContent = text; };
+let toastTimer;
+function toast(text) {
+  const el = $("toast");
+  el.textContent = text;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 1600);
+}
+
+function showTranscript(finalText, interimText = "") {
+  const empty = !finalText && !interimText;
+  transcriptEl.classList.toggle("placeholder", empty);
+  if (empty) {
+    transcriptEl.textContent = "Your words will appear here.";
+  } else {
+    transcriptEl.textContent = finalText;
+    if (interimText) {
+      const span = document.createElement("span");
+      span.className = "interim";
+      span.textContent = (finalText ? " " : "") + interimText;
+      transcriptEl.appendChild(span);
+    }
+  }
+  $("copyBtn").disabled = !finalText;
+  $("clearTranscriptBtn").disabled = !finalText;
+}
+
+// ---------- clipboard ----------
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement("textarea");   // older/file:// fallback
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+  toast("Copied");
+}
+
+// ---------- history (stored locally, never uploaded) ----------
+let history = [];
+try { history = JSON.parse(localStorage.getItem("wf.history") || "[]"); } catch {}
+function saveHistory() { localStorage.setItem("wf.history", JSON.stringify(history)); }
+function addHistory(text) {
+  history.unshift({ text, date: Date.now() });
+  history = history.slice(0, HISTORY_MAX);
+  saveHistory();
+  renderHistory();
+}
+function renderHistory() {
+  $("historyCard").hidden = history.length === 0;
+  const list = $("historyList");
+  list.textContent = "";
+  for (const entry of history) {
+    const li = document.createElement("li");
+    li.title = "Tap to copy";
+    const txt = document.createElement("span");
+    txt.className = "txt";
+    txt.dir = "auto";
+    txt.textContent = entry.text;
+    const time = document.createElement("time");
+    time.textContent = new Date(entry.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    li.append(txt, time);
+    li.addEventListener("click", () => copyText(entry.text));
+    list.appendChild(li);
+  }
+}
+
+// ---------- transcript cleanup (rule-based, fully offline) ----------
+const FILLERS = new Set([
+  "um", "uh", "uhm", "ehm", "eh", "hmm", "mmm",   // English
+  "altså", "liksom", "eeh", "øh", "øhm",          // Norwegian
+  "یعنی", "اا", "ہمم",                              // Urdu
+]);
+function cleanTranscript(text) {
+  const words = text.split(/\s+/).filter((word) => {
+    const bare = word.toLowerCase().replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, "");
+    return bare === "" ? true : !FILLERS.has(bare);
+  });
+  let cleaned = words.join(" ").trim();
+  if (cleaned && cleaned[0].toLowerCase() === cleaned[0]) {
+    cleaned = cleaned[0].toUpperCase() + cleaned.slice(1);
+  }
+  return cleaned;
+}
+
+// ---------- silence detection (auto-stop) ----------
+function startVAD(stream, onSilence) {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new Ctx();
+  const source = ctx.createMediaStreamSource(stream);
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  source.connect(analyser);
+  const data = new Uint8Array(analyser.fftSize);
+  let heardVoice = false, silentMs = 0, fired = false;
+  const timer = setInterval(() => {
+    analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const v = (data[i] - 128) / 128;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / data.length);
+    if (rms > VOICE_RMS) {
+      heardVoice = true;
+      silentMs = 0;
+    } else if (heardVoice && !fired) {
+      silentMs += 100;
+      if (silentMs >= SILENCE_MS) {
+        fired = true;
+        onSilence();
+      }
+    }
+  }, 100);
+  return () => { clearInterval(timer); source.disconnect(); ctx.close(); };
+}
+
+// ---------- engine: Whisper in the browser ----------
+let whisperPipeline = null, whisperModelKey = null;
+
+async function ensureWhisper() {
+  if (whisperPipeline && whisperModelKey === settings.model) return whisperPipeline;
+  setStatus("Loading Whisper AI (downloads once, then cached for offline use)…");
+  micBtn.disabled = true;
+  try {
+    const { pipeline } = await import(TRANSFORMERS_CDN);
+    const progress_callback = (p) => {
+      if (p.status === "progress" && p.progress != null) {
+        setStatus(`Downloading model… ${Math.round(p.progress)}%`);
+      }
+    };
+    const modelId = MODELS[settings.model];
+    try {
+      whisperPipeline = await pipeline("automatic-speech-recognition", modelId,
+        { dtype: "q8", device: navigator.gpu ? "webgpu" : "wasm", progress_callback });
+    } catch {
+      whisperPipeline = await pipeline("automatic-speech-recognition", modelId, { progress_callback });
+    }
+    whisperModelKey = settings.model;
+    return whisperPipeline;
+  } finally {
+    micBtn.disabled = false;
+  }
+}
+
+function toMono16k(audioBuffer) {
+  const targetRate = 16000;
+  const ratio = audioBuffer.sampleRate / targetRate;
+  const length = Math.floor(audioBuffer.duration * targetRate);
+  const channels = [];
+  for (let c = 0; c < audioBuffer.numberOfChannels; c++) channels.push(audioBuffer.getChannelData(c));
+  const out = new Float32Array(length);
+  for (let i = 0; i < length; i++) {
+    const pos = i * ratio;
+    const i0 = Math.floor(pos);
+    const i1 = Math.min(i0 + 1, channels[0].length - 1);
+    const frac = pos - i0;
+    let sample = 0;
+    for (const ch of channels) sample += ch[i0] * (1 - frac) + ch[i1] * frac;
+    out[i] = sample / channels.length;
+  }
+  return out;
+}
+
+const whisperEngine = {
+  stream: null, recorder: null, chunks: [], stopVAD: null,
+  async start() {
+    await ensureWhisper();   // load before recording so progress is visible
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true },
+    });
+    this.chunks = [];
+    this.recorder = new MediaRecorder(this.stream);
+    this.recorder.addEventListener("dataavailable", (e) => { if (e.data.size) this.chunks.push(e.data); });
+    this.recorder.addEventListener("stop", () => this.transcribe());
+    this.recorder.start();
+    if (settings.autostop) this.stopVAD = startVAD(this.stream, () => stopDictation());
+  },
+  stop() {
+    if (this.stopVAD) { this.stopVAD(); this.stopVAD = null; }
+    if (this.recorder && this.recorder.state !== "inactive") this.recorder.stop();
+    if (this.stream) { this.stream.getTracks().forEach((t) => t.stop()); this.stream = null; }
+  },
+  async transcribe() {
+    try {
+      setStatus("Transcribing…");
+      micBtn.disabled = true;
+      const blob = new Blob(this.chunks, { type: this.recorder.mimeType });
+      const bytes = await blob.arrayBuffer();
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      const decoded = await new Promise((res, rej) => ctx.decodeAudioData(bytes, res, rej));
+      ctx.close();
+      const audio = toMono16k(decoded);
+
+      const options = { task: "transcribe" };
+      const whisperLang = LANGS[settings.language].whisper;
+      if (whisperLang) options.language = whisperLang;
+      if (audio.length > 16000 * 28) {           // chunk long recordings
+        options.chunk_length_s = 30;
+        options.stride_length_s = 5;
+      }
+      const result = await whisperPipeline(audio, options);
+      finishDictation((result.text || "").trim());
+    } catch (err) {
+      failDictation(err);
+    }
+  },
+};
+
+// ---------- engine: native browser dictation ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const nativeEngine = {
+  rec: null, finalText: "", stopping: false,
+  supported: !!SR,
+  async start() {
+    this.rec = new SR();
+    this.rec.lang = LANGS[settings.language].native;
+    this.rec.interimResults = true;
+    // With auto-stop on, let the browser end after a phrase; otherwise keep going.
+    this.rec.continuous = !settings.autostop;
+    this.finalText = "";
+    this.stopping = false;
+    this.rec.addEventListener("result", (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const piece = e.results[i][0].transcript;
+        if (e.results[i].isFinal) this.finalText += piece;
+        else interim += piece;
+      }
+      showTranscript(this.finalText.trim(), interim.trim());
+    });
+    this.rec.addEventListener("end", () => {
+      if (!this.stopping) finishDictation(this.finalText.trim());
+    });
+    this.rec.addEventListener("error", (e) => {
+      if (e.error !== "no-speech" && e.error !== "aborted") {
+        failDictation(new Error("Browser dictation error: " + e.error));
+      }
+    });
+    this.rec.start();
+  },
+  stop() {
+    if (this.rec) this.rec.stop();   // "end" fires and finishes
+  },
+};
+
+// ---------- controller ----------
+let recording = false;
+const currentEngine = () => (settings.engine === "native" ? nativeEngine : whisperEngine);
+
+async function startDictation() {
+  if (recording) return;
+  try {
+    recording = true;
+    micBtn.classList.add("recording");
+    micBtn.setAttribute("aria-label", "Stop dictation");
+    showTranscript("");
+    await currentEngine().start();
+    setStatus(settings.autostop ? "Listening… (stops when you pause)" : "Listening… tap to stop.");
+  } catch (err) {
+    failDictation(err);
+  }
+}
+
+function stopDictation() {
+  if (!recording) return;
+  currentEngine().stop();
+}
+
+async function finishDictation(text) {
+  recording = false;
+  micBtn.disabled = false;
+  micBtn.classList.remove("recording");
+  micBtn.setAttribute("aria-label", "Start dictation");
+  if (settings.cleanup && text) text = cleanTranscript(text);
+  showTranscript(text);
+  if (text) {
+    addHistory(text);
+    setStatus("Done — Copy the text, or tap the mic again.");
+  } else {
+    setStatus("Didn't catch anything — try again a bit closer to the mic.");
+  }
+}
+
+function failDictation(err) {
+  recording = false;
+  micBtn.disabled = false;
+  micBtn.classList.remove("recording");
+  const message = (err && err.name === "NotAllowedError")
+    ? "Microphone access denied — allow it in your browser settings."
+    : "Something went wrong: " + ((err && err.message) || err);
+  setStatus(message);
+  try { currentEngine().stop(); } catch {}
+}
+
+micBtn.addEventListener("click", () => (recording ? stopDictation() : startDictation()));
+
+// ---------- wire up the settings UI ----------
+function renderLangChips() {
+  const wrap = $("langChips");
+  wrap.textContent = "";
+  for (const [key, lang] of Object.entries(LANGS)) {
+    const btn = document.createElement("button");
+    btn.textContent = lang.label;
+    btn.setAttribute("aria-pressed", String(settings.language === key));
+    btn.addEventListener("click", () => {
+      settings.language = key;
+      saveSettings();
+      renderLangChips();
+    });
+    wrap.appendChild(btn);
+  }
+}
+
+const engineSel = $("engine"), modelSel = $("model");
+engineSel.value = settings.engine;
+modelSel.value = settings.model;
+$("cleanup").checked = settings.cleanup;
+$("autostop").checked = settings.autostop;
+const syncModelRow = () => { $("modelRow").style.display = settings.engine === "whisper" ? "" : "none"; };
+
+engineSel.addEventListener("change", () => { settings.engine = engineSel.value; saveSettings(); syncModelRow(); });
+modelSel.addEventListener("change", () => { settings.model = modelSel.value; saveSettings(); });
+$("cleanup").addEventListener("change", (e) => { settings.cleanup = e.target.checked; saveSettings(); });
+$("autostop").addEventListener("change", (e) => { settings.autostop = e.target.checked; saveSettings(); });
+
+$("copyBtn").addEventListener("click", () => {
+  if (!transcriptEl.classList.contains("placeholder")) copyText(transcriptEl.textContent);
+});
+$("clearTranscriptBtn").addEventListener("click", () => showTranscript(""));
+$("clearHistoryBtn").addEventListener("click", () => {
+  history = [];
+  saveHistory();
+  renderHistory();
+});
+
+if (!nativeEngine.supported) {
+  engineSel.querySelector('option[value="native"]').disabled = true;
+  if (settings.engine === "native") { settings.engine = "whisper"; engineSel.value = "whisper"; saveSettings(); }
+}
+if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+  setStatus("This page needs HTTPS (or localhost) for microphone access — see the notes below.");
+  micBtn.disabled = true;
+}
+
+renderLangChips();
+syncModelRow();
+renderHistory();
+</script>
+</body>
+</html>
