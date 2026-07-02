@@ -63,7 +63,7 @@
   }
   #transcript.placeholder { color: var(--muted); }
   #transcript .interim { color: var(--muted); }
-  .actions { display: flex; gap: 10px; margin-top: 10px; }
+  .actions { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
   .btn {
     border: none; border-radius: 10px; padding: 10px 14px; font-size: 0.95rem;
     background: var(--chip); color: var(--text); cursor: pointer;
@@ -88,6 +88,8 @@
   .section-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
   .section-head h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
   .link-btn { background: none; border: none; color: var(--muted); font-size: 0.85rem; cursor: pointer; padding: 0; }
+  #recoverCard { border-color: var(--accent); }
+  #recoverInfo { font-size: 0.92rem; color: var(--muted); }
   #historyList { list-style: none; display: flex; flex-direction: column; gap: 6px; }
   #historyList li {
     display: flex; justify-content: space-between; align-items: center; gap: 10px;
@@ -116,6 +118,15 @@
   <h1>WhisperFlow</h1>
   <div id="status">Tap the mic and start talking.</div>
 
+  <div class="card" id="recoverCard" hidden>
+    <div class="section-head"><h2>Interrupted recording found</h2></div>
+    <p id="recoverInfo"></p>
+    <div class="actions">
+      <button class="btn primary" id="recoverBtn">Transcribe it</button>
+      <button class="btn" id="discardRecoveryBtn">Discard</button>
+    </div>
+  </div>
+
   <div class="card">
     <div class="chips" id="langChips" role="group" aria-label="Language"></div>
     <div class="row">
@@ -130,7 +141,8 @@
       <select id="model">
         <option value="tiny">Tiny — fast, ~40 MB</option>
         <option value="base">Base — better, ~80 MB</option>
-        <option value="small">Small — best, ~250 MB</option>
+        <option value="small">Small — great, ~250 MB</option>
+        <option value="turbo">Turbo — best multilingual, ~1 GB</option>
       </select>
     </div>
     <div class="row">
@@ -147,6 +159,8 @@
     <div id="transcript" class="placeholder" dir="auto">Your words will appear here.</div>
     <div class="actions">
       <button class="btn primary" id="copyBtn" disabled>Copy</button>
+      <button class="btn" id="txtBtn" disabled>Save .txt</button>
+      <button class="btn" id="audioBtn" disabled>Save audio</button>
       <button class="btn" id="clearTranscriptBtn" disabled>Clear</button>
     </div>
   </div>
@@ -168,6 +182,17 @@
     <p><strong>Whisper AI engine:</strong> the Whisper speech model runs inside your
     browser — audio never leaves your device. The first use downloads the model
     once; your browser caches it, and after that transcription works offline.</p>
+    <p><strong>Mixed languages (interviews, research):</strong> with the
+    <em>Auto · Mixed</em> chip selected, the recording is split at natural pauses
+    and every part gets its own language detection — so a conversation that hops
+    between English, Norsk and اردو is transcribed correctly per sentence. Use the
+    <em>Small</em> or <em>Turbo</em> model for this: <em>Tiny</em> is weak on Urdu.
+    The browser-dictation engine can't switch languages mid-recording.</p>
+    <p><strong>Nothing is lost on a crash:</strong> while you record with the
+    Whisper engine, the audio is saved to this browser's local storage every
+    second, and browser-dictation text is saved as it arrives. If the app, tab or
+    phone dies mid-recording, reopen this page and it offers to transcribe or
+    restore what was captured. Everything is cleaned up after a normal finish.</p>
     <p><strong>Browser dictation engine:</strong> uses your browser's built-in speech
     recognition. It is instant and very accurate, but on some browsers (e.g.
     Chrome) the audio is processed by an online service — choose the Whisper
@@ -177,8 +202,8 @@
     over HTTPS (for example free GitHub Pages) or via a local server, then open
     that address on your phone. You can also "Add to Home Screen" to use it like
     an app.</p>
-    <p><strong>Privacy:</strong> settings and history are stored only in this
-    browser (local storage). Nothing is uploaded; there are no analytics or accounts.</p>
+    <p><strong>Privacy:</strong> settings, history and crash-recovery data are stored
+    only in this browser. Nothing is uploaded; there are no analytics or accounts.</p>
     <p><strong>Getting text into other apps:</strong> web pages can't type into other
     apps, so tap Copy (or any history row) and paste where you need it.</p>
   </details>
@@ -190,23 +215,26 @@
 <script type="module">
 /* WhisperFlow Web — a single-file, offline-capable dictation app.
    Engines: Whisper AI in-browser (transformers.js, cached after first download)
-   or the browser's native SpeechRecognition. Everything is stored locally. */
+   or the browser's native SpeechRecognition. Everything is stored locally.
+   Crash safety: audio chunks go to IndexedDB every second while recording;
+   dictated text goes to localStorage as it arrives. */
 
 // ---------- languages & models ----------
 const LANGS = {
-  auto: { label: "Auto",    whisper: null,        native: navigator.language || "en-US" },
-  en:   { label: "English", whisper: "english",   native: "en-US" },
-  no:   { label: "Norsk",   whisper: "norwegian", native: "nb-NO" },
-  ur:   { label: "اردو",    whisper: "urdu",      native: "ur-PK" },
+  auto: { label: "Auto · Mixed", whisper: null,        native: navigator.language || "en-US" },
+  en:   { label: "English",      whisper: "english",   native: "en-US" },
+  no:   { label: "Norsk",        whisper: "norwegian", native: "nb-NO" },
+  ur:   { label: "اردو",         whisper: "urdu",      native: "ur-PK" },
 };
 const MODELS = {
   tiny:  "onnx-community/whisper-tiny",
   base:  "onnx-community/whisper-base",
   small: "onnx-community/whisper-small",
+  turbo: "onnx-community/whisper-large-v3-turbo",
 };
 const TRANSFORMERS_CDN = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5/+esm";
 const SILENCE_MS = 1800;      // auto-stop after this much quiet
-const VOICE_RMS = 0.02;       // above this counts as speech
+const VOICE_RMS = 0.02;       // above this counts as speech (analyser, byte domain)
 const HISTORY_MAX = 50;
 
 // ---------- settings (persisted in this browser only) ----------
@@ -228,6 +256,7 @@ function toast(text) {
   toastTimer = setTimeout(() => el.classList.remove("show"), 1600);
 }
 
+let lastAudio = null;   // { blob, mime } of the most recent recording
 function showTranscript(finalText, interimText = "") {
   const empty = !finalText && !interimText;
   transcriptEl.classList.toggle("placeholder", empty);
@@ -243,7 +272,17 @@ function showTranscript(finalText, interimText = "") {
     }
   }
   $("copyBtn").disabled = !finalText;
+  $("txtBtn").disabled = !finalText;
   $("clearTranscriptBtn").disabled = !finalText;
+  $("audioBtn").disabled = !lastAudio;
+}
+
+function downloadFile(name, blob) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
 }
 
 // ---------- clipboard ----------
@@ -308,6 +347,41 @@ function cleanTranscript(text) {
   return cleaned;
 }
 
+// ---------- crash-safe storage (IndexedDB for audio chunks) ----------
+let dbPromise = null;
+function getDB() {
+  dbPromise ??= new Promise((resolve, reject) => {
+    const req = indexedDB.open("whisperflow", 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains("chunks")) db.createObjectStore("chunks", { autoIncrement: true });
+      if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta");
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return dbPromise;
+}
+async function dbRequest(store, mode, run) {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, mode);
+    const req = run(tx.objectStore(store));
+    tx.oncomplete = () => resolve(req && req.result);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+const persistChunk = (blob) => dbRequest("chunks", "readwrite", (s) => s.add(blob)).catch(() => {});
+const persistMeta = (value) => dbRequest("meta", "readwrite", (s) => s.put(value, "recording")).catch(() => {});
+const loadChunks = () => dbRequest("chunks", "readonly", (s) => s.getAll());
+const loadMeta = () => dbRequest("meta", "readonly", (s) => s.get("recording"));
+async function clearRecoveryAudio() {
+  await dbRequest("chunks", "readwrite", (s) => s.clear()).catch(() => {});
+  await dbRequest("meta", "readwrite", (s) => s.clear()).catch(() => {});
+}
+const saveDraftText = (text) => { try { localStorage.setItem("wf.draft", text); } catch {} };
+const clearDraftText = () => localStorage.removeItem("wf.draft");
+
 // ---------- silence detection (auto-stop) ----------
 function startVAD(stream, onSilence) {
   const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -338,6 +412,57 @@ function startVAD(stream, onSilence) {
     }
   }, 100);
   return () => { clearInterval(timer); source.disconnect(); ctx.close(); };
+}
+
+// ---------- speech segmentation (for mixed-language transcription) ----------
+// Splits 16 kHz samples into speech segments separated by pauses, so each
+// segment can get its own language detection. People switch languages at
+// sentence boundaries, and sentence boundaries are where the pauses are.
+function segmentSpeech(samples, rate = 16000) {
+  const FRAME_S = 0.02;   // analysis frame
+  const GAP_S = 0.6;      // pauses shorter than this stay inside one segment
+  const MIN_S = 0.3;      // drop blips shorter than this
+  const PAD_S = 0.15;     // context kept around each segment
+  const MAX_S = 28;       // Whisper's comfortable window
+  const THRESHOLD = 0.015;
+
+  const frame = Math.round(rate * FRAME_S);
+  const voiced = [];
+  for (let i = 0; i < samples.length; i += frame) {
+    const end = Math.min(i + frame, samples.length);
+    let sum = 0;
+    for (let j = i; j < end; j++) sum += samples[j] * samples[j];
+    voiced.push(Math.sqrt(sum / (end - i)) > THRESHOLD);
+  }
+
+  const maxGap = Math.round(GAP_S / FRAME_S);
+  const runs = [];
+  let start = -1, gap = 0;
+  for (let f = 0; f < voiced.length; f++) {
+    if (voiced[f]) {
+      if (start < 0) start = f;
+      gap = 0;
+    } else if (start >= 0 && ++gap > maxGap) {
+      runs.push([start, f - gap + 1]);
+      start = -1;
+      gap = 0;
+    }
+  }
+  if (start >= 0) runs.push([start, voiced.length]);
+
+  const pad = Math.round(PAD_S * rate);
+  const out = [];
+  for (const [fs, fe] of runs) {
+    if ((fe - fs) * frame < MIN_S * rate) continue;   // blip, not speech
+    let s = Math.max(0, fs * frame - pad);
+    const e = Math.min(samples.length, fe * frame + pad);
+    while (e - s > MAX_S * rate) {   // split monologues longer than the window
+      out.push([s, s + MAX_S * rate]);
+      s += MAX_S * rate;
+    }
+    out.push([s, e]);
+  }
+  return out;
 }
 
 // ---------- engine: Whisper in the browser ----------
@@ -387,6 +512,52 @@ function toMono16k(audioBuffer) {
   return out;
 }
 
+async function blobToSamples(blob) {
+  const bytes = await blob.arrayBuffer();
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new Ctx();
+  const decoded = await new Promise((res, rej) => ctx.decodeAudioData(bytes, res, rej));
+  ctx.close();
+  return toMono16k(decoded);
+}
+
+// In "Auto · Mixed" mode each pause-separated segment is transcribed on its
+// own, so Whisper re-detects the language per segment — that's what makes
+// English/Norsk/Urdu switching inside one conversation work.
+async function transcribeSamples(audio) {
+  await ensureWhisper();
+  if (settings.language === "auto") {
+    const segments = segmentSpeech(audio);
+    if (segments.length > 1) {
+      const parts = [];
+      for (let i = 0; i < segments.length; i++) {
+        setStatus(`Transcribing… part ${i + 1} of ${segments.length}`);
+        const [s, e] = segments[i];
+        const result = await whisperPipeline(audio.slice(s, e), { task: "transcribe" });
+        const text = (result.text || "").trim();
+        if (text) parts.push(text);
+      }
+      return parts.join(" ");
+    }
+  }
+  const options = { task: "transcribe" };
+  const whisperLang = LANGS[settings.language].whisper;
+  if (whisperLang) options.language = whisperLang;
+  if (audio.length > 16000 * 28) {           // chunk long recordings
+    options.chunk_length_s = 30;
+    options.stride_length_s = 5;
+  }
+  setStatus("Transcribing…");
+  const result = await whisperPipeline(audio, options);
+  return (result.text || "").trim();
+}
+
+async function transcribeBlob(blob, mime) {
+  lastAudio = { blob, mime };
+  const samples = await blobToSamples(blob);
+  return transcribeSamples(samples);
+}
+
 const whisperEngine = {
   stream: null, recorder: null, chunks: [], stopVAD: null,
   async start() {
@@ -394,11 +565,18 @@ const whisperEngine = {
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true },
     });
+    await clearRecoveryAudio();   // this recording owns the recovery slot now
     this.chunks = [];
     this.recorder = new MediaRecorder(this.stream);
-    this.recorder.addEventListener("dataavailable", (e) => { if (e.data.size) this.chunks.push(e.data); });
+    await persistMeta({ mime: this.recorder.mimeType, startedAt: Date.now() });
+    this.recorder.addEventListener("dataavailable", (e) => {
+      if (e.data.size) {
+        this.chunks.push(e.data);
+        persistChunk(e.data);   // crash-safe copy, once per second
+      }
+    });
     this.recorder.addEventListener("stop", () => this.transcribe());
-    this.recorder.start();
+    this.recorder.start(1000);   // timeslice → periodic dataavailable events
     if (settings.autostop) this.stopVAD = startVAD(this.stream, () => stopDictation());
   },
   stop() {
@@ -408,27 +586,13 @@ const whisperEngine = {
   },
   async transcribe() {
     try {
-      setStatus("Transcribing…");
       micBtn.disabled = true;
       const blob = new Blob(this.chunks, { type: this.recorder.mimeType });
-      const bytes = await blob.arrayBuffer();
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new Ctx();
-      const decoded = await new Promise((res, rej) => ctx.decodeAudioData(bytes, res, rej));
-      ctx.close();
-      const audio = toMono16k(decoded);
-
-      const options = { task: "transcribe" };
-      const whisperLang = LANGS[settings.language].whisper;
-      if (whisperLang) options.language = whisperLang;
-      if (audio.length > 16000 * 28) {           // chunk long recordings
-        options.chunk_length_s = 30;
-        options.stride_length_s = 5;
-      }
-      const result = await whisperPipeline(audio, options);
-      finishDictation((result.text || "").trim());
+      const text = await transcribeBlob(blob, this.recorder.mimeType);
+      await clearRecoveryAudio();   // finished normally — recovery copy not needed
+      finishDictation(text);
     } catch (err) {
-      failDictation(err);
+      failDictation(err, "Your audio was saved — reload this page to recover and retry.");
     }
   },
 };
@@ -453,6 +617,7 @@ const nativeEngine = {
         if (e.results[i].isFinal) this.finalText += piece;
         else interim += piece;
       }
+      saveDraftText(this.finalText.trim());   // crash-safe copy of the text so far
       showTranscript(this.finalText.trim(), interim.trim());
     });
     this.rec.addEventListener("end", () => {
@@ -472,7 +637,21 @@ const nativeEngine = {
 
 // ---------- controller ----------
 let recording = false;
+let recordingTimer = null, recordingStartedAt = 0;
 const currentEngine = () => (settings.engine === "native" ? nativeEngine : whisperEngine);
+
+function startTimer() {
+  recordingStartedAt = Date.now();
+  recordingTimer = setInterval(() => {
+    const total = Math.floor((Date.now() - recordingStartedAt) / 1000);
+    const m = Math.floor(total / 60), s = String(total % 60).padStart(2, "0");
+    setStatus(`Listening… ${m}:${s}${settings.autostop ? " (stops when you pause)" : " — tap to stop"}`);
+  }, 1000);
+}
+function stopTimer() {
+  clearInterval(recordingTimer);
+  recordingTimer = null;
+}
 
 async function startDictation() {
   if (recording) return;
@@ -482,7 +661,8 @@ async function startDictation() {
     micBtn.setAttribute("aria-label", "Stop dictation");
     showTranscript("");
     await currentEngine().start();
-    setStatus(settings.autostop ? "Listening… (stops when you pause)" : "Listening… tap to stop.");
+    setStatus("Listening…");
+    startTimer();
   } catch (err) {
     failDictation(err);
   }
@@ -490,14 +670,17 @@ async function startDictation() {
 
 function stopDictation() {
   if (!recording) return;
+  stopTimer();
   currentEngine().stop();
 }
 
-async function finishDictation(text) {
+function finishDictation(text) {
   recording = false;
+  stopTimer();
   micBtn.disabled = false;
   micBtn.classList.remove("recording");
   micBtn.setAttribute("aria-label", "Start dictation");
+  clearDraftText();
   if (settings.cleanup && text) text = cleanTranscript(text);
   showTranscript(text);
   if (text) {
@@ -508,18 +691,62 @@ async function finishDictation(text) {
   }
 }
 
-function failDictation(err) {
+function failDictation(err, extra = "") {
   recording = false;
+  stopTimer();
   micBtn.disabled = false;
   micBtn.classList.remove("recording");
   const message = (err && err.name === "NotAllowedError")
     ? "Microphone access denied — allow it in your browser settings."
     : "Something went wrong: " + ((err && err.message) || err);
-  setStatus(message);
+  setStatus(extra ? `${message} ${extra}` : message);
   try { currentEngine().stop(); } catch {}
 }
 
 micBtn.addEventListener("click", () => (recording ? stopDictation() : startDictation()));
+
+// ---------- crash recovery on startup ----------
+async function checkRecovery() {
+  // Unsent text from an interrupted browser-dictation session → keep it safe.
+  const draft = localStorage.getItem("wf.draft");
+  if (draft && draft.trim()) {
+    addHistory(draft.trim());
+    showTranscript(draft.trim());
+    setStatus("Recovered text from an interrupted session — it's saved under Recent.");
+  }
+  clearDraftText();
+
+  // Audio chunks from an interrupted Whisper recording → offer to transcribe.
+  try {
+    const chunks = await loadChunks();
+    if (!chunks || !chunks.length) return;
+    const meta = (await loadMeta()) || {};
+    const seconds = chunks.length;   // one chunk ≈ one second
+    const when = meta.startedAt ? new Date(meta.startedAt).toLocaleString() : "an earlier session";
+    $("recoverInfo").textContent =
+      `About ${seconds}s of audio from ${when} was rescued before the app was interrupted.`;
+    $("recoverCard").hidden = false;
+
+    $("recoverBtn").addEventListener("click", async () => {
+      $("recoverCard").hidden = true;
+      try {
+        micBtn.disabled = true;
+        const blob = new Blob(chunks, { type: meta.mime || "audio/webm" });
+        const text = await transcribeBlob(blob, meta.mime || "audio/webm");
+        await clearRecoveryAudio();
+        finishDictation(text);
+      } catch (err) {
+        failDictation(err, "The rescued audio is still saved — you can reload and try again.");
+      }
+    }, { once: true });
+
+    $("discardRecoveryBtn").addEventListener("click", async () => {
+      $("recoverCard").hidden = true;
+      await clearRecoveryAudio();
+      toast("Discarded");
+    }, { once: true });
+  } catch {}
+}
 
 // ---------- wire up the settings UI ----------
 function renderLangChips() {
@@ -553,6 +780,15 @@ $("autostop").addEventListener("change", (e) => { settings.autostop = e.target.c
 $("copyBtn").addEventListener("click", () => {
   if (!transcriptEl.classList.contains("placeholder")) copyText(transcriptEl.textContent);
 });
+$("txtBtn").addEventListener("click", () => {
+  if (transcriptEl.classList.contains("placeholder")) return;
+  downloadFile("whisperflow-transcript.txt", new Blob([transcriptEl.textContent], { type: "text/plain" }));
+});
+$("audioBtn").addEventListener("click", () => {
+  if (!lastAudio) return;
+  const ext = (lastAudio.mime || "").includes("mp4") ? "m4a" : "webm";
+  downloadFile(`whisperflow-audio.${ext}`, lastAudio.blob);
+});
 $("clearTranscriptBtn").addEventListener("click", () => showTranscript(""));
 $("clearHistoryBtn").addEventListener("click", () => {
   history = [];
@@ -572,6 +808,7 @@ if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
 renderLangChips();
 syncModelRow();
 renderHistory();
+checkRecovery();
 </script>
 </body>
 </html>
