@@ -1,0 +1,43 @@
+# XcodeGen project definition.
+# On your Mac:  brew install xcodegen && xcodegen generate && open WhisperFlow.xcodeproj
+name: WhisperFlow
+
+options:
+  bundleIdPrefix: com.example.whisperflow
+  deploymentTarget:
+    macOS: "14.0"
+    iOS: "17.0"
+
+packages:
+  WhisperKit:
+    url: https://github.com/argmaxinc/WhisperKit
+    from: 0.9.0
+
+targets:
+  WhisperFlowMac:
+    type: application
+    platform: macOS
+    sources: [Shared, macOS]
+    dependencies:
+      - package: WhisperKit
+    info:
+      path: macOS/Info.plist
+      properties:
+        NSMicrophoneUsageDescription: WhisperFlow records your voice to turn it into text. Audio never leaves your Mac.
+        LSUIElement: true # menu-bar only, no Dock icon
+    entitlements:
+      path: macOS/WhisperFlowMac.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
+
+  WhisperFlowiOS:
+    type: application
+    platform: iOS
+    sources: [Shared, iOS]
+    dependencies:
+      - package: WhisperKit
+    info:
+      path: iOS/Info.plist
+      properties:
+        NSMicrophoneUsageDescription: WhisperFlow records your voice to turn it into text. Audio never leaves your iPhone.
+        UILaunchScreen: {}
