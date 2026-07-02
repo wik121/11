@@ -14,6 +14,13 @@ struct DictationView: View {
             Text(statusText)
                 .foregroundStyle(.secondary)
 
+            Picker("Language", selection: $engine.language) {
+                ForEach(DictationLanguage.allCases) { language in
+                    Text(language.label).tag(language)
+                }
+            }
+            .pickerStyle(.segmented)
+
             ScrollView {
                 Text(engine.lastTranscript.isEmpty ? "Your words will appear here." : engine.lastTranscript)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -39,6 +46,9 @@ struct DictationView: View {
             .disabled(engine.lastTranscript.isEmpty)
         }
         .padding()
+        .overlay(alignment: .bottomTrailing) {
+            WatermarkView().padding(8)
+        }
         .task { engine.prepare() }
     }
 

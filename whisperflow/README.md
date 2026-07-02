@@ -5,6 +5,10 @@ Transcription runs **entirely on your device** with OpenAI's Whisper model
 (via [WhisperKit](https://github.com/argmaxinc/WhisperKit)); no audio ever
 leaves your Mac or iPhone.
 
+Speaks your languages: **auto-detect** or pick **English, Norsk or اردو (Urdu)**
+in the UI — Whisper understands ~99 languages, so adding more to the picker is
+one line in `Shared/WhisperTranscriber.swift`.
+
 - **macOS**: a menu-bar app. Hold **right ⌥ Option** in any app, speak, release —
   the text is pasted at your cursor.
 - **iOS**: a companion app. Tap the mic, speak, tap again — then copy the
@@ -54,8 +58,18 @@ In Xcode:
 2. Set your own team under *Signing & Capabilities* (any free Apple ID works).
 3. Press **⌘R**.
 
-First launch downloads the Whisper model (~150 MB for `base.en`) — watch the
-status in the menu-bar popover. It's cached afterwards.
+First launch downloads the Whisper model (~500 MB for the multilingual `small`) —
+watch the status in the menu-bar popover. It's cached afterwards.
+
+### Offline & privacy guarantees
+
+- The **only** network access the app ever makes is the one-time model download
+  on first launch. After that it works with Wi-Fi off. To ship with **zero**
+  network access, bundle the model files in the app and load them with
+  `WhisperKitConfig(modelFolder:)` instead.
+- All recording, transcription and language detection happen on-device.
+  Nothing is uploaded, ever.
+- No analytics, no telemetry, no accounts, no logs.
 
 ### macOS permissions (first launch)
 
@@ -84,8 +98,10 @@ If you want to recreate this yourself instead of using this code:
    `AVAudioConverter` (see `AudioRecorder.swift`). Add
    `NSMicrophoneUsageDescription` to Info.plist or recording silently fails.
 
-4. **Transcribe.** `let kit = try await WhisperKit(WhisperKitConfig(model: "base.en"))`
-   then `kit.transcribe(audioArray: samples)`. That's genuinely all.
+4. **Transcribe.** `let kit = try await WhisperKit(WhisperKitConfig(model: "small"))`
+   then `kit.transcribe(audioArray: samples)`. That's genuinely all. Pass a
+   `DecodingOptions` with `language: "no"` / `"ur"` (or `detectLanguage: true`)
+   to control the language.
 
 5. **Make it a menu-bar app (macOS).** SwiftUI's `MenuBarExtra` scene gives you
    the icon + popover for free. Set `LSUIElement = true` in Info.plist so the
@@ -109,13 +125,21 @@ custom vocabulary — is polish on top of these eight steps.
 ## Ideas to extend it
 
 - **Better accuracy**: switch `defaultModel` in `WhisperTranscriber.swift` to
-  `"small.en"` or `"large-v3"` (Apple Silicon handles it fine). Use a non-`.en`
-  model (e.g. `"small"`) for Norwegian and other languages.
+  `"large-v3"` (Apple Silicon handles it fine). Urdu in particular benefits
+  from the bigger model.
 - **Streaming preview**: WhisperKit supports real-time transcription while you talk.
-- **AI cleanup**: pipe the raw transcript through the Claude API to remove
-  filler words and fix punctuation before pasting — this is Wispr Flow's secret sauce.
+- **AI cleanup**: pipe the raw transcript through a *local* LLM (Apple's
+  on-device Foundation Models framework, or a small model via MLX/llama.cpp) to
+  remove filler words and fix punctuation before pasting — Wispr Flow's secret
+  sauce, kept 100% offline.
 - **Custom hotkey**: replace the hard-coded right-Option in `HotkeyMonitor.swift`
   with a user-configurable shortcut (e.g. the `KeyboardShortcuts` package).
 - **iOS keyboard extension**: a custom keyboard could offer dictation inside
   other apps, but keyboard extensions have tight mic/memory restrictions —
   that's why it's not in this starter.
+
+## License & branding
+
+Open source under the [MIT License](LICENSE), attributed only to "WT".
+The apps carry no author information — just a small **WT 2026** mark in the
+bottom-right corner of each screen (`Shared/Watermark.swift`).

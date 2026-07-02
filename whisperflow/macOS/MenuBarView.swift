@@ -14,6 +14,13 @@ struct MenuBarView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
+            Picker("Language", selection: $engine.language) {
+                ForEach(DictationLanguage.allCases) { language in
+                    Text(language.label).tag(language)
+                }
+            }
+            .pickerStyle(.menu)
+
             if !engine.lastTranscript.isEmpty {
                 Divider()
                 Text(engine.lastTranscript)
@@ -23,8 +30,12 @@ struct MenuBarView: View {
 
             Divider()
 
-            Button("Quit WhisperFlow") {
-                NSApplication.shared.terminate(nil)
+            HStack {
+                Button("Quit WhisperFlow") {
+                    NSApplication.shared.terminate(nil)
+                }
+                Spacer()
+                WatermarkView()
             }
         }
         .padding(16)

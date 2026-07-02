@@ -1,13 +1,33 @@
 import Foundation
 import WhisperKit
 
+/// Languages offered in the UI. Whisper itself understands ~99 languages,
+/// so adding another one here is a single new case.
+enum DictationLanguage: String, CaseIterable, Identifiable {
+    case auto = "auto"
+    case english = "en"
+    case norwegian = "no"
+    case urdu = "ur"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .auto: "Auto-detect"
+        case .english: "English"
+        case .norwegian: "Norsk"
+        case .urdu: "اردو (Urdu)"
+        }
+    }
+}
+
 /// Wraps WhisperKit: downloads a Whisper model on first launch (cached afterwards)
 /// and turns raw audio samples into text — fully on-device, nothing leaves the device.
 actor WhisperTranscriber {
-    /// "base.en" is small and fast. For better accuracy try "small.en",
-    /// or "large-v3" on Apple Silicon Macs. Non-".en" models handle all languages,
-    /// including Norwegian.
-    static let defaultModel = "base.en"
+    /// "small" is multilingual (English, Norwegian, Urdu, ~96 more) and a good
+    /// speed/accuracy balance. "large-v3" is noticeably better for Urdu and
+    /// runs fine on Apple Silicon; "base" is faster but English-leaning.
+    static let defaultModel = "small"
 
     private var whisperKit: WhisperKit?
 
@@ -16,11 +36,18 @@ actor WhisperTranscriber {
         whisperKit = try await WhisperKit(WhisperKitConfig(model: model))
     }
 
-    func transcribe(_ samples: [Float]) async throws -> String {
+    func transcribe(_ samples: [Float], language: DictationLanguage = .auto) async throws -> String {
         try await loadModelIfNeeded()
         guard let whisperKit, !samples.isEmpty else { return "" }
 
-        let results = try await whisperKit.transcribe(audioArray: samples)
+        var options = DecodingOptions(task: .transcribe)
+        if language == .auto {
+            options.detectLanguage = true
+        } else {
+            options.language = language.rawValue
+        }
+
+        let results = try await whisperKit.transcribe(audioArray: samples, decodeOptions: options)
         return results
             .map(\.text)
             .joined(separator: " ")

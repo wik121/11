@@ -17,12 +17,24 @@ final class DictationEngine: ObservableObject {
     @Published private(set) var state: State = .idle
     @Published private(set) var lastTranscript = ""
 
+    /// Dictation language, remembered across launches. Auto-detect works well
+    /// when you switch languages mid-day; picking one explicitly is more accurate.
+    @Published var language: DictationLanguage {
+        didSet { UserDefaults.standard.set(language.rawValue, forKey: Self.languageKey) }
+    }
+
     /// Called with the finished text. On macOS this types it into the active app;
     /// on iOS the view shows it and offers Copy.
     var onTranscript: ((String) -> Void)?
 
+    private static let languageKey = "dictation.language"
     private let recorder = AudioRecorder()
     private let transcriber = WhisperTranscriber()
+
+    init() {
+        let saved = UserDefaults.standard.string(forKey: Self.languageKey) ?? ""
+        language = DictationLanguage(rawValue: saved) ?? .auto
+    }
 
     /// Kick off the (one-time) model download so the first dictation isn't slow.
     func prepare() {
@@ -60,7 +72,7 @@ final class DictationEngine: ObservableObject {
         state = .transcribing
         Task {
             do {
-                let text = try await transcriber.transcribe(samples)
+                let text = try await transcriber.transcribe(samples, language: language)
                 lastTranscript = text
                 state = .idle
                 if !text.isEmpty { onTranscript?(text) }
