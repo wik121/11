@@ -2,7 +2,7 @@
 *.xcodeproj
 # Generated Info.plist / entitlements (XcodeGen writes them from project.yml)
 macOS/Info.plist
-macOS/WhisperFlowMac.entitlements
+macOS/AdvanceFlowSecureMac.entitlements
 iOS/Info.plist
 
 # Xcode

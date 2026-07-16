@@ -39,7 +39,7 @@ struct MenuBarView: View {
             Divider()
 
             HStack {
-                Button("Quit WhisperFlow") {
+                Button("Quit Advance Flow Secure") {
                     NSApplication.shared.terminate(nil)
                 }
                 Spacer()

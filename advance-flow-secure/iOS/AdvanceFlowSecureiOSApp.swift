@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct WhisperFlowiOSApp: App {
+struct AdvanceFlowSecureiOSApp: App {
     var body: some Scene {
         WindowGroup {
             DictationView()

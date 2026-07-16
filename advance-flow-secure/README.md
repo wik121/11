@@ -1,4 +1,4 @@
-# WhisperFlow — a Wispr Flow clone for macOS and iOS
+# Advance Flow Secure — a Wispr Flow clone for macOS and iOS
 
 Hold a key, talk, let go — your words are typed into whatever app you're using.
 Transcription runs **entirely on your device** with OpenAI's Whisper model
@@ -15,7 +15,7 @@ one line in `Shared/WhisperTranscriber.swift`.
   transcript wherever you need it. (iOS doesn't allow apps to type into other
   apps, so copy/paste is the honest way to do this.)
 
-**Also in this folder:** [`web/whisperflow-web.html`](web/whisperflow-web.html) — the
+**Also in this folder:** [`web/advance-flow-secure.html`](web/advance-flow-secure.html) — the
 same idea as a single HTML file that runs on any desktop or phone browser, with
 Whisper running in-browser (offline after the first model download), mixed
 English/Norwegian/Urdu transcription, crash-safe recording, timestamps + SRT
@@ -70,14 +70,14 @@ generated from `project.yml` with [XcodeGen](https://github.com/yonaskolb/XcodeG
 
 ```bash
 brew install xcodegen
-cd whisperflow
+cd advance-flow-secure
 xcodegen generate
-open WhisperFlow.xcodeproj
+open AdvanceFlowSecure.xcodeproj
 ```
 
 In Xcode:
 
-1. Pick the **WhisperFlowMac** scheme (or **WhisperFlowiOS** + a simulator/your iPhone).
+1. Pick the **AdvanceFlowSecureMac** scheme (or **AdvanceFlowSecureiOS** + a simulator/your iPhone).
 2. Set your own team under *Signing & Capabilities* (any free Apple ID works).
 3. Press **⌘R**.
 
@@ -101,7 +101,7 @@ want a faster first start on the Mac.
 
 - **Microphone** — system prompt, click Allow.
 - **Accessibility** — needed both to see the global hotkey and to paste for you:
-  *System Settings → Privacy & Security → Accessibility → enable WhisperFlow*.
+  *System Settings → Privacy & Security → Accessibility → enable Advance Flow Secure*.
   Restart the app after granting it.
 
 ---
@@ -163,14 +163,14 @@ custom vocabulary — is polish on top of these eight steps.
 For the Mac app, the standard open-source route (no App Store needed):
 
 1. **Archive**: Xcode → Product → Archive (or
-   `xcodebuild -scheme WhisperFlowMac archive`).
+   `xcodebuild -scheme AdvanceFlowSecureMac archive`).
 2. **Sign & notarize**: sign with a Developer ID Application certificate, zip
-   the app, submit with `xcrun notarytool submit WhisperFlow.zip --wait`, then
-   `xcrun stapler staple WhisperFlow.app`. Unsigned builds still run, but users
+   the app, submit with `xcrun notarytool submit AdvanceFlowSecure.zip --wait`, then
+   `xcrun stapler staple AdvanceFlowSecure.app`. Unsigned builds still run, but users
    have to right-click → Open past Gatekeeper.
 3. **Publish** the zip on a GitHub Release, and optionally add a
    [Homebrew cask](https://docs.brew.sh/Cask-Cookbook) so people can
-   `brew install --cask whisperflow`.
+   `brew install --cask advance-flow-secure`.
 
 The iOS app can only realistically ship through the App Store (TestFlight for
 testing). Note that Apple's developer program requires a real identity, so full

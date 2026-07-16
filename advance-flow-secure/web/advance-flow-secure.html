@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#4f6df5">
-<link rel="manifest" href='data:application/manifest+json,{"name":"WhisperFlow","short_name":"WhisperFlow","start_url":".","display":"standalone","background_color":"%23101014","theme_color":"%234f6df5"}'>
-<title>WhisperFlow</title>
+<link rel="manifest" href='data:application/manifest+json,{"name":"Advance Flow Secure","short_name":"AdvanceFlow","start_url":".","display":"standalone","background_color":"%23101014","theme_color":"%234f6df5"}'>
+<title>Advance Flow Secure</title>
 <style>
   :root {
     --bg: #f4f4f6;
@@ -123,7 +123,7 @@
 </head>
 <body>
 <main>
-  <h1>WhisperFlow</h1>
+  <h1>Advance Flow Secure</h1>
   <div id="status">Tap the mic and start talking.</div>
 
   <div class="card" id="recoverCard" hidden>
@@ -251,7 +251,7 @@
 <div class="wm">WT 2026</div>
 
 <script type="module">
-/* WhisperFlow Web — a single-file, offline-capable dictation app.
+/* Advance Flow Secure Web — a single-file, offline-capable dictation app.
    Engines: Whisper AI in-browser (transformers.js, cached after first download)
    or the browser's native SpeechRecognition. Everything is stored locally.
    Crash safety: audio chunks go to IndexedDB every second while recording;
@@ -285,8 +285,8 @@ const defaults = {
   timestamps: false, speakers: false, vocab: "",
 };
 let settings = { ...defaults };
-try { settings = { ...defaults, ...JSON.parse(localStorage.getItem("wf.settings") || "{}") }; } catch {}
-const saveSettings = () => localStorage.setItem("wf.settings", JSON.stringify(settings));
+try { settings = { ...defaults, ...JSON.parse(localStorage.getItem("afs.settings") || "{}") }; } catch {}
+const saveSettings = () => localStorage.setItem("afs.settings", JSON.stringify(settings));
 const vocabTerms = () => settings.vocab.split(/[\n,]+/).map((t) => t.trim()).filter(Boolean);
 
 // ---------- tiny DOM helpers ----------
@@ -350,8 +350,8 @@ async function copyText(text) {
 
 // ---------- history (stored locally, never uploaded) ----------
 let history = [];
-try { history = JSON.parse(localStorage.getItem("wf.history") || "[]"); } catch {}
-function saveHistory() { localStorage.setItem("wf.history", JSON.stringify(history)); }
+try { history = JSON.parse(localStorage.getItem("afs.history") || "[]"); } catch {}
+function saveHistory() { localStorage.setItem("afs.history", JSON.stringify(history)); }
 function addHistory(text) {
   history.unshift({ text, date: Date.now() });
   history = history.slice(0, HISTORY_MAX);
@@ -539,7 +539,7 @@ function assignSpeakers(segments) {
 let dbPromise = null;
 function getDB() {
   dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open("whisperflow", 1);
+    const req = indexedDB.open("advance-flow-secure", 1);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains("chunks")) db.createObjectStore("chunks", { autoIncrement: true });
@@ -567,8 +567,8 @@ async function clearRecoveryAudio() {
   await dbRequest("chunks", "readwrite", (s) => s.clear()).catch(() => {});
   await dbRequest("meta", "readwrite", (s) => s.clear()).catch(() => {});
 }
-const saveDraftText = (text) => { try { localStorage.setItem("wf.draft", text); } catch {} };
-const clearDraftText = () => localStorage.removeItem("wf.draft");
+const saveDraftText = (text) => { try { localStorage.setItem("afs.draft", text); } catch {} };
+const clearDraftText = () => localStorage.removeItem("afs.draft");
 
 // ---------- silence detection (auto-stop) ----------
 function startVAD(stream, onSilence) {
@@ -972,7 +972,7 @@ micBtn.addEventListener("click", () => (recording ? stopDictation() : startDicta
 // ---------- crash recovery on startup ----------
 async function checkRecovery() {
   // Unsent text from an interrupted browser-dictation session → keep it safe.
-  const draft = localStorage.getItem("wf.draft");
+  const draft = localStorage.getItem("afs.draft");
   if (draft && draft.trim()) {
     addHistory(draft.trim());
     showTranscript(draft.trim());
@@ -1048,16 +1048,16 @@ $("copyBtn").addEventListener("click", () => {
 });
 $("txtBtn").addEventListener("click", () => {
   if (transcriptEl.classList.contains("placeholder")) return;
-  downloadFile("whisperflow-transcript.txt", new Blob([transcriptEl.textContent], { type: "text/plain" }));
+  downloadFile("advance-flow-secure-transcript.txt", new Blob([transcriptEl.textContent], { type: "text/plain" }));
 });
 $("srtBtn").addEventListener("click", () => {
   if (!lastSegments.length) return;
-  downloadFile("whisperflow-transcript.srt", new Blob([toSRT(lastSegments)], { type: "text/plain" }));
+  downloadFile("advance-flow-secure-transcript.srt", new Blob([toSRT(lastSegments)], { type: "text/plain" }));
 });
 $("audioBtn").addEventListener("click", () => {
   if (!lastAudio) return;
   const ext = (lastAudio.mime || "").includes("mp4") ? "m4a" : "webm";
-  downloadFile(`whisperflow-audio.${ext}`, lastAudio.blob);
+  downloadFile(`advance-flow-secure-audio.${ext}`, lastAudio.blob);
 });
 $("clearTranscriptBtn").addEventListener("click", () => { lastSegments = []; showTranscript(""); });
 $("clearHistoryBtn").addEventListener("click", () => {

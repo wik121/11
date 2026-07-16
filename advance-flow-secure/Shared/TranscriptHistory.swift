@@ -19,7 +19,7 @@ final class TranscriptHistory: ObservableObject {
     private let fileURL: URL = {
         let directory = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("WhisperFlow", isDirectory: true)
+            .appendingPathComponent("AdvanceFlowSecure", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory.appendingPathComponent("history.json")
     }()

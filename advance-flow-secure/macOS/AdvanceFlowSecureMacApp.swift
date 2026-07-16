@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct WhisperFlowMacApp: App {
+struct AdvanceFlowSecureMacApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {

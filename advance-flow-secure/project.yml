@@ -1,9 +1,9 @@
 # XcodeGen project definition.
-# On your Mac:  brew install xcodegen && xcodegen generate && open WhisperFlow.xcodeproj
-name: WhisperFlow
+# On your Mac:  brew install xcodegen && xcodegen generate && open AdvanceFlowSecure.xcodeproj
+name: AdvanceFlowSecure
 
 options:
-  bundleIdPrefix: com.example.whisperflow
+  bundleIdPrefix: com.example.advanceflowsecure
   deploymentTarget:
     macOS: "14.0"
     iOS: "17.0"
@@ -14,7 +14,7 @@ packages:
     from: 0.9.0
 
 targets:
-  WhisperFlowMac:
+  AdvanceFlowSecureMac:
     type: application
     platform: macOS
     sources: [Shared, macOS]
@@ -23,14 +23,14 @@ targets:
     info:
       path: macOS/Info.plist
       properties:
-        NSMicrophoneUsageDescription: WhisperFlow records your voice to turn it into text. Audio never leaves your Mac.
+        NSMicrophoneUsageDescription: Advance Flow Secure records your voice to turn it into text. Audio never leaves your Mac.
         LSUIElement: true # menu-bar only, no Dock icon
     entitlements:
-      path: macOS/WhisperFlowMac.entitlements
+      path: macOS/AdvanceFlowSecureMac.entitlements
       properties:
         com.apple.security.device.audio-input: true
 
-  WhisperFlowiOS:
+  AdvanceFlowSecureiOS:
     type: application
     platform: iOS
     sources: [Shared, iOS]
@@ -39,5 +39,5 @@ targets:
     info:
       path: iOS/Info.plist
       properties:
-        NSMicrophoneUsageDescription: WhisperFlow records your voice to turn it into text. Audio never leaves your iPhone.
+        NSMicrophoneUsageDescription: Advance Flow Secure records your voice to turn it into text. Audio never leaves your iPhone.
         UILaunchScreen: {}

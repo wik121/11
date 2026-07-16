@@ -11,7 +11,7 @@ struct DictationView: View {
     var body: some View {
         VStack(spacing: 20) {
             HStack {
-                Text("WhisperFlow")
+                Text("Advance Flow Secure")
                     .font(.largeTitle.bold())
                 Spacer()
                 Button {
